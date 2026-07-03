@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Agentes de IA en la Nube — Deportes</title>
+<meta name="theme-color" content="#0b1020">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">🤖</span>
+      <div>
+        <h1>Agentes de IA en la Nube</h1>
+        <p>Análisis deportivo en tiempo real con datos reales</p>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <input id="search-input" type="text" placeholder="Buscar jugador..." autocomplete="off">
+      <div id="search-results" class="search-results hidden"></div>
+    </div>
+  </header>
+
+  <nav class="sport-tabs" id="sport-tabs">
+    <button class="sport-tab active" data-sport="nba">🏀 Baloncesto (NBA)</button>
+    <button class="sport-tab" data-sport="nhl">🏒 Hockey (NHL)</button>
+    <button class="sport-tab" data-sport="football">⚽ Fútbol</button>
+    <button class="sport-tab disabled" disabled title="Próximamente — sin fuente gratuita confiable">🎾 Tenis (próximamente)</button>
+    <button class="sport-tab disabled" disabled title="Próximamente — sin fuente gratuita confiable">🏓 Tenis de mesa (próximamente)</button>
+  </nav>
+
+  <section id="live-strip" class="live-strip">
+    <div class="live-label-wrap">
+      <div class="live-label">PARTIDOS DE HOY</div>
+      <div class="live-sub">Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones</div>
+    </div>
+    <div id="live-games" class="live-games">Cargando partidos de hoy…</div>
+  </section>
+
+  <div id="roster-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="roster-title">Alineaciones</h3>
+        <button id="roster-close" class="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="roster-body">Cargando alineaciones…</div>
+    </div>
+  </div>
+
+  <main id="player-view" class="player-view hidden">
+    <section class="player-card">
+      <img id="player-photo" class="player-photo" alt="">
+      <div class="player-meta">
+        <h2 id="player-name">—</h2>
+        <p id="player-sub">—</p>
+        <span id="player-badge" class="badge">—</span>
+      </div>
+      <div id="player-semaphore" class="semaphore-box neutral">
+        <span id="player-semaphore-dot" class="semaphore-dot"></span>
+        <div>
+          <div id="player-semaphore-pct" class="semaphore-pct">—%</div>
+          <div id="player-semaphore-label" class="semaphore-label">Probabilidad</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ai-panel">
+      <div class="ai-panel-header">
+        <span class="ai-dot"></span>
+        <h3>Agente IA · Análisis en tiempo real</h3>
+        <span id="ai-rating" class="rating-pill neutral">—</span>
+      </div>
+      <p id="ai-headline" class="ai-headline">Cargando análisis…</p>
+      <ul id="ai-bullets" class="ai-bullets"></ul>
+    </section>
+
+    <section class="stats-grid" id="stats-grid"></section>
+
+    <section class="props-section">
+      <h3>Líneas estimadas por el Agente IA</h3>
+      <p class="props-disclaimer">Estimaciones estadísticas propias del agente, a partir del promedio real del jugador. Son solo informativas, no son cuotas de casas de apuestas.</p>
+      <div id="props-list" class="props-list"></div>
+    </section>
+
+    <section class="gamelog-section collapsible" id="gamelog-section">
+      <div class="gamelog-header" id="gamelog-toggle">
+        <h3>Registro de partidos recientes</h3>
+        <span class="pr-chevron">▾</span>
+      </div>
+      <div class="gamelog-content" id="gamelog-content">
+        <div class="table-wrap">
+          <table id="gamelog-table">
+            <thead id="gamelog-head"></thead>
+            <tbody id="gamelog-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section id="empty-state" class="empty-state">
+    <p id="empty-state-text">Busca un jugador de NBA arriba para ver sus estadísticas y el análisis del agente de IA.</p>
+    <div class="suggestions" id="suggestions"></div>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
