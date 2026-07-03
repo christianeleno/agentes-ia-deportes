@@ -293,6 +293,43 @@ async def football_live():
     return {"games": games}
 
 
+@app.get("/api/football/match/{match_id}/preview")
+async def football_match_preview(match_id: int):
+    try:
+        match = await football_client.match_detail(match_id)
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+
+    code = (match.get("competition") or {}).get("code")
+    home = match.get("homeTeam") or {}
+    away = match.get("awayTeam") or {}
+    home_name = home.get("shortName") or home.get("name")
+    away_name = away.get("shortName") or away.get("name")
+
+    home_row, home_group = await football_client.team_standing_row(code, home.get("id"))
+    away_row, away_group = await football_client.team_standing_row(code, away.get("id"))
+
+    win_prob = None
+    if home_row and away_row:
+        home_played = home_row.get("playedGames") or 0
+        away_played = away_row.get("playedGames") or 0
+        if home_played and away_played:
+            home_pct = (home_row.get("points") or 0) / (home_played * 3)
+            away_pct = (away_row.get("points") or 0) / (away_played * 3)
+            win_prob = win_probability(home_pct, away_pct)
+
+    preview = football_agent.preview_match(home_name, away_name, home_row, away_row, home_group, away_group, win_prob)
+
+    return {
+        "competition": (match.get("competition") or {}).get("name"),
+        "status": match.get("status"),
+        "date": match.get("utcDate"),
+        "home": {"name": home_name, "crest": home.get("crest"), "standing": home_row},
+        "away": {"name": away_name, "crest": away.get("crest"), "standing": away_row},
+        **preview,
+    }
+
+
 @app.on_event("shutdown")
 async def shutdown():
     await nba_client.close_client()

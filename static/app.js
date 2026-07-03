@@ -84,6 +84,7 @@ const SPORTS = {
     chips: ["Kylian Mbappé", "Lionel Messi", "Erling Haaland", "Vinicius Junior", "Jude Bellingham"],
     hasGamelog: false,
     hasRoster: false,
+    hasMatchPreview: true,
     statTiles: [
       ["goals", "Goles"],
       ["assists", "Asistencias"],
@@ -127,9 +128,14 @@ sportTabs.querySelectorAll(".sport-tab:not(.disabled)").forEach((tab) => {
 
 function updateLiveSub() {
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
-  liveSubEl.textContent = hasRoster
-    ? "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones"
-    : "Incluye la probabilidad de victoria estimada por el agente. (Las alineaciones no están disponibles para fútbol en el plan gratuito de la fuente de datos.)";
+  const hasMatchPreview = !!SPORTS[currentSport].hasMatchPreview;
+  if (hasRoster) {
+    liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones";
+  } else if (hasMatchPreview) {
+    liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver la ficha de prepartido (posiciones y forma de cada equipo)";
+  } else {
+    liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente.";
+  }
 }
 
 function switchSport(sport) {
@@ -372,6 +378,8 @@ function footballDetail(g) {
 async function loadLiveScoreboard() {
   liveGamesEl.textContent = "Cargando partidos de hoy…";
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
+  const hasMatchPreview = !!SPORTS[currentSport].hasMatchPreview;
+  const isClickable = hasRoster || hasMatchPreview;
   try {
     const data = await fetchJson(api("/live"));
     if (!data.games.length) {
@@ -384,7 +392,7 @@ async function loadLiveScoreboard() {
         const wpText = wp ? `Prob. victoria: ${g.away.abbreviation || g.away.name} ${wp.away}% · ${g.home.abbreviation || g.home.name} ${wp.home}%` : "";
         const detail = currentSport === "football" ? footballDetail(g) : g.detail || "";
         return `
-        <div class="live-game${hasRoster ? "" : " no-roster"}" data-game-id="${g.id}" data-matchup="${g.away.name} @ ${g.home.name}">
+        <div class="live-game${isClickable ? "" : " no-roster"}" data-game-id="${g.id}" data-matchup="${g.away.name} @ ${g.home.name}">
           <span class="lg-status">${detail}</span>
           ${g.away.name} ${g.away.score ?? ""} @ ${g.home.name} ${g.home.score ?? ""}
           ${wpText ? `<span class="lg-winprob">${wpText}</span>` : ""}
@@ -394,6 +402,10 @@ async function loadLiveScoreboard() {
     if (hasRoster) {
       liveGamesEl.querySelectorAll(".live-game[data-game-id]").forEach((el) => {
         el.addEventListener("click", () => openRoster(el.dataset.gameId, el.dataset.matchup));
+      });
+    } else if (hasMatchPreview) {
+      liveGamesEl.querySelectorAll(".live-game[data-game-id]").forEach((el) => {
+        el.addEventListener("click", () => openMatchPreview(el.dataset.gameId, el.dataset.matchup));
       });
     }
   } catch (err) {
@@ -423,6 +435,49 @@ async function openRoster(gameId, titleText) {
     console.error(err);
     rosterBody.innerHTML = "No se pudieron cargar las alineaciones de este partido.";
   }
+}
+
+async function openMatchPreview(matchId, titleText) {
+  rosterModal.classList.remove("hidden");
+  rosterTitle.textContent = titleText || "Ficha de prepartido";
+  rosterBody.innerHTML = "Cargando ficha de prepartido…";
+  try {
+    const data = await fetchJson(api(`/match/${matchId}/preview`));
+    const wp = data.winProbability;
+    const wpText = wp ? `<p class="preview-winprob">Probabilidad estimada: ${data.away.name} ${wp.away}% · ${data.home.name} ${wp.home}%</p>` : "";
+    rosterBody.innerHTML = `
+      <div class="ai-headline" style="margin-bottom:10px;">${data.headline}</div>
+      ${wpText}
+      <ul class="ai-bullets" style="margin-bottom:16px;">${(data.bullets || []).map((b) => `<li>${b}</li>`).join("")}</ul>
+      <div class="roster-teams">
+        ${renderPreviewTeam(data.away)}
+        ${renderPreviewTeam(data.home)}
+      </div>`;
+  } catch (err) {
+    console.error(err);
+    rosterBody.innerHTML = "No se pudo cargar la ficha de este partido.";
+  }
+}
+
+function renderPreviewTeam(team) {
+  const row = team && team.standing;
+  if (!row) {
+    return `<div class="roster-team"><h4>${(team && team.name) || ""}</h4><p style="color:var(--muted); font-size:12px;">Sin datos de tabla disponibles para este equipo todavía.</p></div>`;
+  }
+  const diff = row.goalDifference;
+  const diffTxt = typeof diff === "number" ? (diff > 0 ? `+${diff}` : `${diff}`) : "—";
+  const stats = [
+    ["Posición", `${row.position}°`],
+    ["Puntos", row.points],
+    ["Partidos jugados", row.playedGames],
+    ["G-E-P", `${row.won}-${row.draw}-${row.lost}`],
+    ["Diferencia de gol", diffTxt],
+  ];
+  return `
+    <div class="roster-team">
+      <h4>${team.name || ""}</h4>
+      ${stats.map(([label, value]) => `<div class="preview-stat"><span class="ps-label">${label}</span><span class="ps-value">${value ?? "—"}</span></div>`).join("")}
+    </div>`;
 }
 
 function renderRosterTeam(team) {

@@ -137,10 +137,16 @@ async def find_player(player_id: int) -> dict | None:
     return None
 
 
-# --- Standings (para probabilidad de victoria) ------------------------------
+# --- Standings (para probabilidad de victoria y ficha de prepartido) -------
+#
+# Nota: en competencias con fase de grupos (Mundial, Champions League) la
+# respuesta trae VARIOS grupos "TOTAL" (Group A, Group B, ...), cada uno con
+# su propia tabla — no una tabla única. Por eso se cachea la lista completa
+# de grupos y se busca el equipo en todos ellos, en vez de asumir un solo
+# grupo/tabla como en una liga doméstica.
 
 
-async def competition_standings(code: str) -> list[dict]:
+async def _standings_groups(code: str) -> list[dict]:
     now = time.time()
     if code not in _standings_cache or (now - _standings_at.get(code, 0)) > _STANDINGS_TTL:
         try:
@@ -149,23 +155,39 @@ async def competition_standings(code: str) -> list[dict]:
             _standings_cache[code] = []
             _standings_at[code] = now
             return []
-        table = []
-        for group in data.get("standings", []):
-            if group.get("type") == "TOTAL":
-                table = group.get("table", [])
-                break
-        _standings_cache[code] = table
+        groups = [g for g in data.get("standings", []) if g.get("type") == "TOTAL"]
+        _standings_cache[code] = groups
         _standings_at[code] = now
     return _standings_cache[code]
 
 
+async def competition_standings(code: str) -> list[dict]:
+    """Tabla combinada (liga doméstica = 1 sola tabla; torneo con grupos = todas concatenadas)."""
+    table: list[dict] = []
+    for group in await _standings_groups(code):
+        table.extend(group.get("table", []))
+    return table
+
+
+async def team_standing_row(code: str, team_id: int) -> tuple[dict | None, str | None]:
+    for group in await _standings_groups(code):
+        for row in group.get("table", []):
+            if row.get("team", {}).get("id") == team_id:
+                return row, group.get("group")
+    return None, None
+
+
 async def team_point_pct(code: str, team_id: int) -> float | None:
-    for row in await competition_standings(code):
-        if row.get("team", {}).get("id") == team_id:
-            played = row.get("playedGames") or 0
-            points = row.get("points") or 0
-            return points / (played * 3) if played else None
-    return None
+    row, _ = await team_standing_row(code, team_id)
+    if not row:
+        return None
+    played = row.get("playedGames") or 0
+    points = row.get("points") or 0
+    return points / (played * 3) if played else None
+
+
+async def match_detail(match_id: int) -> dict:
+    return await _get(f"/matches/{match_id}")
 
 
 # --- Marcador en vivo --------------------------------------------------------

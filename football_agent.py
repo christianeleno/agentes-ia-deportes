@@ -86,3 +86,52 @@ def analyze_player(player: dict) -> dict:
             "playedMatches": stats.get("playedMatches"),
         },
     }
+
+
+def _team_form_line(name: str, row: dict, group: str | None) -> str:
+    played = row.get("playedGames") or 0
+    diff = row.get("goalDifference")
+    diff_txt = f"{diff:+d}" if isinstance(diff, int) else "—"
+    group_txt = f" ({group})" if group else ""
+    return (
+        f"{name}{group_txt}: {row.get('position')}° lugar, {row.get('points')} pts en {played} PJ "
+        f"({row.get('won')}G-{row.get('draw')}E-{row.get('lost')}P), diferencia de gol {diff_txt}."
+    )
+
+
+def preview_match(
+    home_name: str,
+    away_name: str,
+    home_row: dict | None,
+    away_row: dict | None,
+    home_group: str | None,
+    away_group: str | None,
+    win_prob: dict | None,
+) -> dict:
+    """Ficha de prepartido a nivel de equipo: football-data.org (plan gratuito)
+    no da alineaciones, así que esto compara la posición y forma en la tabla
+    de cada equipo, no jugadores confirmados."""
+    bullets = []
+    if home_row:
+        bullets.append(_team_form_line(home_name, home_row, home_group))
+    if away_row:
+        bullets.append(_team_form_line(away_name, away_row, away_group))
+
+    if not home_row or not away_row:
+        headline = "Todavía no hay suficientes datos de tabla para comparar a estos dos equipos."
+    elif win_prob:
+        if win_prob["home"] >= win_prob["away"] + 10:
+            headline = f"{home_name} llega como favorito de local según su posición en la tabla ({win_prob['home']}% probabilidad de victoria estimada)."
+        elif win_prob["away"] >= win_prob["home"] + 10:
+            headline = f"{away_name} llega como favorito de visita según su posición en la tabla ({win_prob['away']}% probabilidad de victoria estimada)."
+        else:
+            headline = "Partido parejo: ambos equipos llegan con opciones similares según su posición en la tabla."
+    else:
+        headline = f"{home_name} y {away_name} tienen datos de tabla, pero no fue posible estimar una probabilidad."
+
+    bullets.append(
+        "Comparación a nivel de equipo (posición y forma en la tabla): football-data.org (plan gratuito) "
+        "no entrega la alineación confirmada de cada equipo."
+    )
+
+    return {"headline": headline, "bullets": bullets, "winProbability": win_prob}
