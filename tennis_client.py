@@ -97,7 +97,8 @@ async def scoreboard() -> list[dict]:
                             "id": comp.get("id"),
                             "tour": tour.upper(),
                             "tournament": tournament,
-                            "round": grouping_name,
+                            "category": grouping_name,
+                            "round": (comp.get("round") or {}).get("displayName"),
                             "date": date_str,
                             "state": status.get("state"),
                             "detail": status.get("shortDetail") or status.get("detail"),
@@ -108,3 +109,73 @@ async def scoreboard() -> list[dict]:
 
     matches.sort(key=lambda m: (m["state"] != "in", m["date"] or ""))
     return matches[:40]
+
+
+# --- Ficha de "prepartido" -------------------------------------------------
+#
+# No hay ranking ni estadísticas de temporada disponibles (ver docstring del
+# módulo), pero el marcador SÍ trae el cuadro completo del torneo, así que
+# se puede armar el "camino a este partido" de cada jugador dentro del mismo
+# torneo: contra quién jugó, si ganó, y el marcador de sets. Es contexto
+# real, no una probabilidad numérica (no hay suficiente señal para eso).
+
+
+def _player_path(comps: list[dict], player_id: str, before_date: str) -> list[dict]:
+    results = []
+    for c in comps:
+        status = c.get("status", {}).get("type", {})
+        if status.get("state") != "post":
+            continue
+        date_str = c.get("date") or ""
+        if not date_str or date_str >= before_date:
+            continue
+        competitors = c.get("competitors", [])
+        me = next((x for x in competitors if x.get("id") == player_id), None)
+        opp = next((x for x in competitors if x.get("id") != player_id), None)
+        if not me:
+            continue
+        results.append(
+            {
+                "date": date_str,
+                "round": (c.get("round") or {}).get("displayName"),
+                "opponent": (opp.get("athlete") or {}).get("displayName") if opp else None,
+                "won": me.get("winner", False),
+                "setsFor": [ls.get("value") for ls in me.get("linescores", [])],
+                "setsAgainst": [ls.get("value") for ls in (opp or {}).get("linescores", [])],
+            }
+        )
+    results.sort(key=lambda r: r["date"])
+    return results
+
+
+async def match_preview(match_id: str) -> dict | None:
+    for tour in TOURS:
+        try:
+            data = await _tour_scoreboard(tour)
+        except httpx.HTTPError:
+            continue
+        for ev in data.get("events", []):
+            tournament = ev.get("shortName") or ev.get("name")
+            for g in ev.get("groupings", []):
+                grouping_name = (g.get("grouping") or {}).get("displayName")
+                if grouping_name not in SINGLES_GROUPINGS:
+                    continue
+                comps = g.get("competitions", [])
+                target = next((c for c in comps if str(c.get("id")) == str(match_id)), None)
+                if not target:
+                    continue
+
+                competitors = target.get("competitors", [])
+                home = next((c for c in competitors if c.get("order") == 1), competitors[0])
+                away = next((c for c in competitors if c.get("order") == 2), competitors[-1])
+                target_date = target.get("date") or ""
+
+                return {
+                    "tour": tour.upper(),
+                    "tournament": tournament,
+                    "category": grouping_name,
+                    "round": (target.get("round") or {}).get("displayName"),
+                    "home": {**_competitor_summary(home), "path": _player_path(comps, home.get("id"), target_date)},
+                    "away": {**_competitor_summary(away), "path": _player_path(comps, away.get("id"), target_date)},
+                }
+    return None

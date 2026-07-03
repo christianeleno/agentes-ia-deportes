@@ -95,6 +95,7 @@ const SPORTS = {
   },
   tennis: {
     hasPlayers: false,
+    hasMatchPreview: true,
     emptyText: "Marcador de torneos ATP y WTA en vivo. Por ahora no hay análisis de jugador para tenis: ESPN no expone estadísticas de temporada ni ranking de tenistas de forma gratuita.",
   },
 };
@@ -141,7 +142,9 @@ function updateLiveSub() {
   const hasPlayers = SPORTS[currentSport].hasPlayers !== false;
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
   const hasMatchPreview = !!SPORTS[currentSport].hasMatchPreview;
-  if (!hasPlayers) {
+  if (!hasPlayers && hasMatchPreview) {
+    liveSubEl.textContent = "Marcador de torneos en vivo · haz clic en un partido para ver el camino de cada jugador en el torneo";
+  } else if (!hasPlayers) {
     liveSubEl.textContent = "Marcador de torneos en vivo, sin análisis de jugador para este deporte.";
   } else if (hasRoster) {
     liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones";
@@ -408,8 +411,8 @@ function renderTennisCard(m) {
   const homeName = `${m.home.name || "?"}${m.home.winner ? " ✓" : ""}`;
   const awayName = `${m.away.name || "?"}${m.away.winner ? " ✓" : ""}`;
   return `
-    <div class="live-game no-roster">
-      <span class="lg-status">${m.tour} · ${m.tournament || ""} · ${m.round || ""}${label ? " · " + label : ""}</span>
+    <div class="live-game" data-game-id="${m.id}" data-matchup="${m.tournament || ""} · ${m.round || m.category || ""}: ${m.away.name} vs ${m.home.name}">
+      <span class="lg-status">${m.tour} · ${m.tournament || ""} · ${m.round || m.category || ""}${label ? " · " + label : ""}</span>
       ${awayName} vs ${homeName}
       ${score ? `<span class="lg-winprob">${score}</span>` : ""}
     </div>`;
@@ -428,6 +431,9 @@ async function loadLiveScoreboard() {
     }
     if (currentSport === "tennis") {
       liveGamesEl.innerHTML = data.games.map(renderTennisCard).join("");
+      liveGamesEl.querySelectorAll(".live-game[data-game-id]").forEach((el) => {
+        el.addEventListener("click", () => openTennisPreview(el.dataset.gameId, el.dataset.matchup));
+      });
       return;
     }
     liveGamesEl.innerHTML = data.games
@@ -497,6 +503,21 @@ async function openMatchPreview(matchId, titleText) {
         ${renderPreviewTeam(data.away)}
         ${renderPreviewTeam(data.home)}
       </div>`;
+  } catch (err) {
+    console.error(err);
+    rosterBody.innerHTML = "No se pudo cargar la ficha de este partido.";
+  }
+}
+
+async function openTennisPreview(matchId, titleText) {
+  rosterModal.classList.remove("hidden");
+  rosterTitle.textContent = titleText || "Ficha de prepartido";
+  rosterBody.innerHTML = "Cargando ficha de prepartido…";
+  try {
+    const data = await fetchJson(api(`/match/${matchId}/preview`));
+    rosterBody.innerHTML = `
+      <div class="ai-headline" style="margin-bottom:10px;">${data.headline}</div>
+      <ul class="ai-bullets">${(data.bullets || []).map((b) => `<li>${b}</li>`).join("")}</ul>`;
   } catch (err) {
     console.error(err);
     rosterBody.innerHTML = "No se pudo cargar la ficha de este partido.";

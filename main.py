@@ -34,6 +34,7 @@ import nba_agent
 import nba_client
 import nhl_agent
 import nhl_client
+import tennis_agent
 import tennis_client
 from agent_common import win_probability
 
@@ -340,6 +341,14 @@ async def football_match_preview(match_id: int):
 @app.get("/api/tennis/live")
 async def tennis_live():
     return {"games": await tennis_client.scoreboard()}
+
+
+@app.get("/api/tennis/match/{match_id}/preview")
+async def tennis_match_preview(match_id: str):
+    data = await tennis_client.match_preview(match_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    return {**data, **tennis_agent.preview_match(data)}
 
 
 @app.on_event("shutdown")
