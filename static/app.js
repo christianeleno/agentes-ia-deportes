@@ -5,6 +5,7 @@ const emptyState = document.getElementById("empty-state");
 const emptyStateText = document.getElementById("empty-state-text");
 const suggestionsEl = document.getElementById("suggestions");
 const liveGamesEl = document.getElementById("live-games");
+const liveSubEl = document.getElementById("live-sub");
 const rosterModal = document.getElementById("roster-modal");
 const rosterBody = document.getElementById("roster-body");
 const rosterTitle = document.getElementById("roster-title");
@@ -124,6 +125,13 @@ sportTabs.querySelectorAll(".sport-tab:not(.disabled)").forEach((tab) => {
   tab.addEventListener("click", () => switchSport(tab.dataset.sport));
 });
 
+function updateLiveSub() {
+  const hasRoster = SPORTS[currentSport].hasRoster !== false;
+  liveSubEl.textContent = hasRoster
+    ? "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones"
+    : "Incluye la probabilidad de victoria estimada por el agente. (Las alineaciones no están disponibles para fútbol en el plan gratuito de la fuente de datos.)";
+}
+
 function switchSport(sport) {
   if (sport === currentSport) return;
   currentSport = sport;
@@ -134,6 +142,7 @@ function switchSport(sport) {
   searchInput.placeholder = SPORTS[sport].placeholder;
   emptyStateText.textContent = SPORTS[sport].emptyText;
   renderSuggestions();
+  updateLiveSub();
   playerView.classList.add("hidden");
   emptyState.classList.remove("hidden");
   searchResults.classList.add("hidden");
@@ -450,5 +459,6 @@ rosterModal.addEventListener("click", (e) => {
 
 renderSuggestions();
 searchInput.placeholder = SPORTS[currentSport].placeholder;
+updateLiveSub();
 loadLiveScoreboard();
 liveTimer = setInterval(loadLiveScoreboard, 30000);
