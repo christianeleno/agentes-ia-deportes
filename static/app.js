@@ -6,6 +6,7 @@ const emptyStateText = document.getElementById("empty-state-text");
 const suggestionsEl = document.getElementById("suggestions");
 const liveGamesEl = document.getElementById("live-games");
 const liveSubEl = document.getElementById("live-sub");
+const searchWrapEl = document.getElementById("search-wrap");
 const rosterModal = document.getElementById("roster-modal");
 const rosterBody = document.getElementById("roster-body");
 const rosterTitle = document.getElementById("roster-title");
@@ -92,6 +93,16 @@ const SPORTS = {
       ["playedMatches", "PJ"],
     ],
   },
+  tennis: {
+    hasPlayers: false,
+    emptyText: "Marcador de torneos ATP y WTA en vivo. Por ahora no hay análisis de jugador para tenis: ESPN no expone estadísticas de temporada ni ranking de tenistas de forma gratuita.",
+  },
+};
+
+const TENNIS_STATUS_ES = {
+  STATUS_FINAL: "Final",
+  STATUS_RETIRED: "Retiro",
+  STATUS_WALKOVER: "Walkover",
 };
 
 const FOOTBALL_STATUS_ES = {
@@ -127,9 +138,12 @@ sportTabs.querySelectorAll(".sport-tab:not(.disabled)").forEach((tab) => {
 });
 
 function updateLiveSub() {
+  const hasPlayers = SPORTS[currentSport].hasPlayers !== false;
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
   const hasMatchPreview = !!SPORTS[currentSport].hasMatchPreview;
-  if (hasRoster) {
+  if (!hasPlayers) {
+    liveSubEl.textContent = "Marcador de torneos en vivo, sin análisis de jugador para este deporte.";
+  } else if (hasRoster) {
     liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver las alineaciones";
   } else if (hasMatchPreview) {
     liveSubEl.textContent = "Incluye la probabilidad de victoria estimada por el agente · haz clic para ver la ficha de prepartido (posiciones y forma de cada equipo)";
@@ -144,8 +158,10 @@ function switchSport(sport) {
   sportTabs.querySelectorAll(".sport-tab").forEach((t) => {
     t.classList.toggle("active", t.dataset.sport === sport);
   });
+  const hasPlayers = SPORTS[sport].hasPlayers !== false;
+  searchWrapEl.classList.toggle("hidden", !hasPlayers);
   searchInput.value = "";
-  searchInput.placeholder = SPORTS[sport].placeholder;
+  searchInput.placeholder = SPORTS[sport].placeholder || "";
   emptyStateText.textContent = SPORTS[sport].emptyText;
   renderSuggestions();
   updateLiveSub();
@@ -156,7 +172,7 @@ function switchSport(sport) {
 }
 
 function renderSuggestions() {
-  suggestionsEl.innerHTML = SPORTS[currentSport].chips
+  suggestionsEl.innerHTML = (SPORTS[currentSport].chips || [])
     .map((name) => `<button class="chip" data-name="${name}">${name}</button>`)
     .join("");
   suggestionsEl.querySelectorAll(".chip").forEach((chip) => {
@@ -375,6 +391,30 @@ function footballDetail(g) {
   return `${g.competition || ""} · ${label} ${time}`;
 }
 
+function tennisSetsScore(m) {
+  const home = m.home.sets || [];
+  const away = m.away.sets || [];
+  const len = Math.max(home.length, away.length);
+  const pairs = [];
+  for (let i = 0; i < len; i++) {
+    pairs.push(`${home[i] ?? "-"}-${away[i] ?? "-"}`);
+  }
+  return pairs.join(", ");
+}
+
+function renderTennisCard(m) {
+  const label = TENNIS_STATUS_ES[m.detail] || m.detail || "";
+  const score = tennisSetsScore(m);
+  const homeName = `${m.home.name || "?"}${m.home.winner ? " ✓" : ""}`;
+  const awayName = `${m.away.name || "?"}${m.away.winner ? " ✓" : ""}`;
+  return `
+    <div class="live-game no-roster">
+      <span class="lg-status">${m.tour} · ${m.tournament || ""} · ${m.round || ""}${label ? " · " + label : ""}</span>
+      ${awayName} vs ${homeName}
+      ${score ? `<span class="lg-winprob">${score}</span>` : ""}
+    </div>`;
+}
+
 async function loadLiveScoreboard() {
   liveGamesEl.textContent = "Cargando partidos de hoy…";
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
@@ -384,6 +424,10 @@ async function loadLiveScoreboard() {
     const data = await fetchJson(api("/live"));
     if (!data.games.length) {
       liveGamesEl.innerHTML = `<span style="color:var(--muted); font-size:12px;">No hay partidos programados hoy.</span>`;
+      return;
+    }
+    if (currentSport === "tennis") {
+      liveGamesEl.innerHTML = data.games.map(renderTennisCard).join("");
       return;
     }
     liveGamesEl.innerHTML = data.games

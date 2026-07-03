@@ -9,9 +9,10 @@ ver FOOTBALL_DATA_API_KEY en .env). La capa de "agente" (nba_agent.py /
 nhl_agent.py / football_agent.py) es una heurística estadística con la
 misma forma de salida (headline + bullets + rating + probability) que
 tendría un agente basado en Vertex AI / Gemini, para poder conectarla más
-adelante sin tocar el resto de la app. Tenis y tenis de mesa quedan
-pendientes: no existe hoy una fuente gratuita y confiable con datos por
-jugador para esos deportes.
+adelante sin tocar el resto de la app. Tenis (ATP/WTA, vía ESPN) solo
+tiene marcador de torneos en vivo, sin análisis de jugador: ESPN no expone
+estadísticas de temporada ni registro de partidos por jugador de tenis.
+Tenis de mesa queda pendiente: no existe hoy ninguna fuente gratuita.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ import nba_agent
 import nba_client
 import nhl_agent
 import nhl_client
+import tennis_client
 from agent_common import win_probability
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -330,8 +332,19 @@ async def football_match_preview(match_id: int):
     }
 
 
+# ---------------------------------------------------------------------------
+# Tenis (solo marcador en vivo — ESPN no expone estadisticas de jugador)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/tennis/live")
+async def tennis_live():
+    return {"games": await tennis_client.scoreboard()}
+
+
 @app.on_event("shutdown")
 async def shutdown():
     await nba_client.close_client()
     await nhl_client.close_client()
     await football_client.close_client()
+    await tennis_client.close_client()
