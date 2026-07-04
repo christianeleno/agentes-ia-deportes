@@ -495,14 +495,38 @@ async function openMatchPreview(matchId, titleText) {
     const data = await fetchJson(api(`/match/${matchId}/preview`));
     const wp = data.winProbability;
     const wpText = wp ? `<p class="preview-winprob">Probabilidad estimada: ${data.away.name} ${wp.away}% · ${data.home.name} ${wp.home}%</p>` : "";
+    const goalLines = data.goalLines || [];
+    const goalLinesHtml = goalLines.length
+      ? `
+        <h4 style="margin:0 0 8px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Proyección de goles del partido</h4>
+        <div class="props-list" style="margin-bottom:16px;">
+          ${goalLines
+            .map(
+              (l) => `
+            <div class="prop-row">
+              <span class="pr-title">${l.statLabel}</span>
+              <span class="pr-line">Más de ${l.line}</span>
+              <span class="pr-pct ${l.level}">${l.pct}% probabilidad</span>
+            </div>`
+            )
+            .join("")}
+        </div>`
+      : "";
     rosterBody.innerHTML = `
       <div class="ai-headline" style="margin-bottom:10px;">${data.headline}</div>
       ${wpText}
       <ul class="ai-bullets" style="margin-bottom:16px;">${(data.bullets || []).map((b) => `<li>${b}</li>`).join("")}</ul>
+      ${goalLinesHtml}
       <div class="roster-teams">
         ${renderPreviewTeam(data.away)}
         ${renderPreviewTeam(data.home)}
       </div>`;
+    rosterBody.querySelectorAll(".roster-player[data-id]").forEach((el) => {
+      el.addEventListener("click", () => {
+        closeRoster();
+        loadPlayer(el.dataset.id);
+      });
+    });
   } catch (err) {
     console.error(err);
     rosterBody.innerHTML = "No se pudo cargar la ficha de este partido.";
@@ -538,10 +562,23 @@ function renderPreviewTeam(team) {
     ["G-E-P", `${row.won}-${row.draw}-${row.lost}`],
     ["Diferencia de gol", diffTxt],
   ];
+  const players = team.players || [];
+  const playersHtml = players.length
+    ? players
+        .map(
+          (p) => `
+        <div class="roster-player" data-id="${p.id}">
+          <span class="rp-name">${p.fullName}</span>
+          <span class="rp-pts">${p.goals ?? 0} G</span>
+        </div>`
+        )
+        .join("")
+    : `<p style="color:var(--muted); font-size:11px; margin:8px 0 0;">Sin goleadores registrados para este equipo en esta competencia (football-data.org no da el plantel completo gratis).</p>`;
   return `
     <div class="roster-team">
       <h4>${team.name || ""}</h4>
       ${stats.map(([label, value]) => `<div class="preview-stat"><span class="ps-label">${label}</span><span class="ps-value">${value ?? "—"}</span></div>`).join("")}
+      ${playersHtml}
     </div>`;
 }
 

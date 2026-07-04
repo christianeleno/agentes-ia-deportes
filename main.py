@@ -322,13 +322,32 @@ async def football_match_preview(match_id: int):
             win_prob = win_probability(home_pct, away_pct)
 
     preview = football_agent.preview_match(home_name, away_name, home_row, away_row, home_group, away_group, win_prob)
+    goal_lines = football_agent.match_goal_lines(home_name, away_name, home_row, away_row)
+
+    home_players = await football_client.team_scorers(home.get("name"))
+    away_players = await football_client.team_scorers(away.get("name"))
+
+    def _player_summary(p: dict) -> dict:
+        stats = p.get("stats", {})
+        return {"id": p["id"], "fullName": p["fullName"], "goals": stats.get("goals"), "assists": stats.get("assists")}
 
     return {
         "competition": (match.get("competition") or {}).get("name"),
         "status": match.get("status"),
         "date": match.get("utcDate"),
-        "home": {"name": home_name, "crest": home.get("crest"), "standing": home_row},
-        "away": {"name": away_name, "crest": away.get("crest"), "standing": away_row},
+        "goalLines": goal_lines,
+        "home": {
+            "name": home_name,
+            "crest": home.get("crest"),
+            "standing": home_row,
+            "players": [_player_summary(p) for p in home_players],
+        },
+        "away": {
+            "name": away_name,
+            "crest": away.get("crest"),
+            "standing": away_row,
+            "players": [_player_summary(p) for p in away_players],
+        },
         **preview,
     }
 

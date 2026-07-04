@@ -137,6 +137,25 @@ async def find_player(player_id: int) -> dict | None:
     return None
 
 
+async def team_scorers(team_name: str) -> list[dict]:
+    """Goleadores conocidos de un equipo (solo los que están en el índice de
+    goleadores de su competencia — football-data.org no da el plantel
+    completo en el plan gratuito, así que esto no es la nómina entera)."""
+    if not team_name:
+        return []
+    index = await player_index()
+    matches = [p for p in index if p["team"] == team_name]
+    matches.sort(key=lambda p: to_int(p["stats"].get("goals")), reverse=True)
+    return matches
+
+
+def to_int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 # --- Standings (para probabilidad de victoria y ficha de prepartido) -------
 #
 # Nota: en competencias con fase de grupos (Mundial, Champions League) la
@@ -191,15 +210,31 @@ async def match_detail(match_id: int) -> dict:
 
 
 # --- Marcador en vivo --------------------------------------------------------
+#
+# Se cachea por poco tiempo (además de manejar 429/errores con gracia) porque
+# el plan gratuito de football-data.org limita a 10 llamadas/minuto, y este
+# endpoint se puede refrescar seguido desde el frontend.
+
+_scoreboard_cache: list[dict] = []
+_scoreboard_at = 0.0
+_SCOREBOARD_TTL = 45
 
 
 async def scoreboard(date_from: str, date_to: str) -> list[dict]:
-    data = await _get(
-        "/matches",
-        competitions=",".join(COMPETITIONS),
-        dateFrom=date_from,
-        dateTo=date_to,
-    )
+    global _scoreboard_cache, _scoreboard_at
+    if _scoreboard_cache and (time.time() - _scoreboard_at) < _SCOREBOARD_TTL:
+        return _scoreboard_cache
+
+    try:
+        data = await _get(
+            "/matches",
+            competitions=",".join(COMPETITIONS),
+            dateFrom=date_from,
+            dateTo=date_to,
+        )
+    except httpx.HTTPStatusError:
+        return _scoreboard_cache
+
     matches = data.get("matches", [])
     games = []
     for m in matches:
@@ -225,4 +260,6 @@ async def scoreboard(date_from: str, date_to: str) -> list[dict]:
                 },
             }
         )
+    _scoreboard_cache = games
+    _scoreboard_at = time.time()
     return games

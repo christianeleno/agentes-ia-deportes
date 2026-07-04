@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from agent_common import clamp, prop_row, semaphore_level, to_float
 
+# No hay datos de tiros de esquina ni tarjetas en football-data.org (plan
+# gratuito) en ningún endpoint — solo goles. Por eso las líneas de partido
+# se limitan a goles.
+
 
 def estimate_player_probability(stats: dict) -> dict:
     played = to_float(stats.get("playedMatches"))
@@ -131,7 +135,33 @@ def preview_match(
 
     bullets.append(
         "Comparación a nivel de equipo (posición y forma en la tabla): football-data.org (plan gratuito) "
-        "no entrega la alineación confirmada de cada equipo."
+        "no entrega la alineación confirmada de cada equipo, ni tiros de esquina o tarjetas."
     )
 
     return {"headline": headline, "bullets": bullets, "winProbability": win_prob}
+
+
+def match_goal_lines(home_name: str, away_name: str, home_row: dict | None, away_row: dict | None) -> list[dict]:
+    """Proyección de goles del partido a partir del promedio real de goles a
+    favor/en contra de cada equipo en la tabla (método Poisson, igual que las
+    líneas de jugador). No hay datos de corners ni tarjetas disponibles."""
+    if not home_row or not away_row:
+        return []
+    home_played = home_row.get("playedGames") or 0
+    away_played = away_row.get("playedGames") or 0
+    if not home_played or not away_played:
+        return []
+
+    home_gf = to_float(home_row.get("goalsFor")) / home_played
+    home_ga = to_float(home_row.get("goalsAgainst")) / home_played
+    away_gf = to_float(away_row.get("goalsFor")) / away_played
+    away_ga = to_float(away_row.get("goalsAgainst")) / away_played
+
+    expected_home = (home_gf + away_ga) / 2
+    expected_away = (away_gf + home_ga) / 2
+
+    return [
+        prop_row("Partido", f"Total de goles de {home_name}", expected_home),
+        prop_row("Partido", f"Total de goles de {away_name}", expected_away),
+        prop_row("Partido", "Total de goles del partido (ambos equipos)", expected_home + expected_away),
+    ]
