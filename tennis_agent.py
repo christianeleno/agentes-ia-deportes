@@ -1,10 +1,13 @@
 """
-Agente de análisis para tenis.
+Agente de análisis para tenis — camino de cada jugador dentro del torneo.
 
-Sin ranking ATP/WTA ni estadísticas de temporada disponibles (ver
-tennis_client.py), este agente no calcula una probabilidad numérica —
-sería inventar señal que no existe. En su lugar resume el camino real de
-cada jugador dentro del mismo torneo (contra quién jugó, resultado, sets).
+Basado únicamente en datos de ESPN (tennis_client.py), que no tiene ranking
+ni estadísticas de temporada, así que este agente no calcula una
+probabilidad aquí. La predicción de "quién gana" (cuando hay cuota
+disponible) se calcula aparte en tennis_stats_agent.py con datos de
+RapidAPI y se combina con esto en main.py — por eso esta función no debe
+afirmar que "no hay probabilidad disponible": puede haberla, solo que no
+viene de esta fuente.
 """
 from __future__ import annotations
 
@@ -39,8 +42,6 @@ def preview_match(data: dict) -> dict:
     bullets = [
         _summarize_path(home.get("name") or "Jugador local", home.get("path", [])),
         _summarize_path(away.get("name") or "Jugador visitante", away.get("path", [])),
-        "No hay ranking ATP/WTA ni estadísticas de temporada disponibles gratis para calcular una "
-        "probabilidad numérica; esto es solo el camino de cada jugador dentro de este torneo.",
     ]
     headline = f"{data.get('tournament', 'Torneo')} · {data.get('category', '')} · {data.get('round', '')}"
     return {"headline": headline, "bullets": bullets}

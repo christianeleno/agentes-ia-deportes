@@ -1,14 +1,17 @@
 """
 Agente de análisis de estadísticas de tenis (a partir de tennis_stats_client).
 
-No hay líneas de proyección (prop lines) para tenis: los datos disponibles
-son resultados de partidos (sets), no una estadística por partido con una
-tasa clara tipo Poisson (goles, puntos, etc.), así que inventar una línea
-sería fabricar señal que no existe.
+No hay líneas de proyección (prop lines) por jugador tipo Poisson (goles,
+puntos, etc.) para tenis: los datos disponibles son resultados de partidos
+(sets), no una tasa por partido. Sí se puede estimar, con datos reales,
+quién gana un enfrentamiento específico (forma reciente + récord de
+carrera de ambos) y si el partido tiende a irse a la distancia completa
+(ver predict_match) — eso NO es lo mismo que puntos/hándicap, que esta
+API no expone y por lo tanto no se inventan.
 """
 from __future__ import annotations
 
-from agent_common import clamp, semaphore_level, to_float
+from agent_common import clamp, prop_row, semaphore_level, to_float, win_probability
 
 
 def _parse_record(record: str | None) -> tuple[int, int]:
@@ -115,4 +118,53 @@ def analyze_player(name: str, bundle: dict) -> dict:
         "bullets": bullets,
         "probability": estimate_probability(stats),
         "keyStats": season_stats(bundle),
+    }
+
+
+def _strength_score(stats: dict) -> float:
+    recent = stats.get("recentGames") or []
+    recent_wr = (recent.count("w") / len(recent)) if recent else 0.5
+    wins, losses = _parse_record(stats.get("total"))
+    career_wr = wins / (wins + losses) if (wins + losses) else 0.5
+    return 0.6 * recent_wr + 0.4 * career_wr
+
+
+def _recent_set_counts(bundle: dict) -> list[int]:
+    matches = (bundle.get("matchesPlayed") or {}).get("singles") or []
+    counts = []
+    for m in matches[:10]:
+        score = (m.get("result") or "").strip()
+        sets = [s for s in score.split(" ") if s and s[0].isdigit()]
+        if len(sets) >= 2:
+            counts.append(len(sets))
+    return counts
+
+
+def predict_match(home_name: str, away_name: str, home_bundle: dict | None, away_bundle: dict | None) -> dict | None:
+    """Predicción a nivel de partido (quién gana + si se va a la distancia
+    completa) a partir de la forma reciente y el récord de carrera de ambos
+    jugadores. No hay puntos ni hándicap: esta API no da datos punto a punto
+    ni de games, así que no se inventan."""
+    if not home_bundle or not away_bundle:
+        return None
+
+    home_stats = home_bundle.get("statistics") or {}
+    away_stats = away_bundle.get("statistics") or {}
+    if not home_stats or not away_stats:
+        return None
+
+    wp = win_probability(_strength_score(home_stats), _strength_score(away_stats), home_edge=0)
+
+    set_counts = _recent_set_counts(home_bundle) + _recent_set_counts(away_bundle)
+    sets_line = None
+    if set_counts:
+        avg_sets = sum(set_counts) / len(set_counts)
+        sets_line = prop_row("Partido", "Total de sets del partido", avg_sets)
+
+    favorite = home_name if wp["home"] >= wp["away"] else away_name
+    favorite_pct = max(wp["home"], wp["away"])
+    return {
+        "winProbability": wp,
+        "setsLine": sets_line,
+        "headline": f"{favorite} es favorito según forma reciente y récord de carrera ({favorite_pct}% probabilidad estimada).",
     }

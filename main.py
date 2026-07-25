@@ -20,6 +20,7 @@ Tenis de mesa queda pendiente: no existe hoy ninguna fuente gratuita.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -368,12 +369,30 @@ async def tennis_live():
     return {"games": await tennis_client.scoreboard()}
 
 
+async def _tennis_bundle_or_none(name: str | None) -> dict | None:
+    if not name:
+        return None
+    try:
+        return await tennis_stats_client.player_bundle(name)
+    except (httpx.HTTPStatusError, tennis_stats_client.QuotaExceeded):
+        return None
+
+
 @app.get("/api/tennis/match/{match_id}/preview")
 async def tennis_match_preview(match_id: str):
     data = await tennis_client.match_preview(match_id)
     if not data:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
-    return {**data, **tennis_agent.preview_match(data)}
+
+    home_bundle, away_bundle = await asyncio.gather(
+        _tennis_bundle_or_none(data["home"].get("name")),
+        _tennis_bundle_or_none(data["away"].get("name")),
+    )
+    prediction = tennis_stats_agent.predict_match(
+        data["home"].get("name"), data["away"].get("name"), home_bundle, away_bundle
+    )
+
+    return {**data, **tennis_agent.preview_match(data), "prediction": prediction}
 
 
 @app.get("/api/tennis/search")

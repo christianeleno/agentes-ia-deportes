@@ -565,8 +565,29 @@ async function openTennisPreview(matchId, titleText) {
   rosterBody.innerHTML = "Cargando ficha de prepartido…";
   try {
     const data = await fetchJson(api(`/match/${matchId}/preview`));
+    const pred = data.prediction;
+    let predictionHtml;
+    if (pred) {
+      const wp = pred.winProbability;
+      const setsHtml = pred.setsLine
+        ? `<div class="props-list" style="margin-bottom:12px;">
+            <div class="prop-row">
+              <span class="pr-title">${pred.setsLine.statLabel}</span>
+              <span class="pr-line">Más de ${pred.setsLine.line}</span>
+              <span class="pr-pct ${pred.setsLine.level}">${pred.setsLine.pct}% probabilidad</span>
+            </div>
+          </div>`
+        : "";
+      predictionHtml = `
+        <div class="ai-headline" style="margin-bottom:6px;">${pred.headline}</div>
+        <p class="preview-winprob">Probabilidad estimada: ${data.away.name} ${wp.away}% · ${data.home.name} ${wp.home}%</p>
+        ${setsHtml}`;
+    } else {
+      predictionHtml = `<p style="color:var(--muted); font-size:11px; margin:0 0 12px;">No hay suficientes datos de ambos jugadores en la fuente de estadísticas para estimar quién gana este partido (o se agotó la cuota diaria gratuita).</p>`;
+    }
     rosterBody.innerHTML = `
-      <div class="ai-headline" style="margin-bottom:10px;">${data.headline}</div>
+      ${predictionHtml}
+      <p style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin:0 0 6px;">${data.headline}</p>
       <ul class="ai-bullets">${(data.bullets || []).map((b) => `<li>${b}</li>`).join("")}</ul>`;
   } catch (err) {
     console.error(err);
