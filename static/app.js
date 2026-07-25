@@ -94,9 +94,30 @@ const SPORTS = {
     ],
   },
   tennis: {
-    hasPlayers: false,
+    hasRoster: false,
     hasMatchPreview: true,
-    emptyText: "Marcador de torneos ATP y WTA en vivo. Por ahora no hay análisis de jugador para tenis: ESPN no expone estadísticas de temporada ni ranking de tenistas de forma gratuita.",
+    hasPropLines: false,
+    placeholder: "Buscar tenista (ej. Alcaraz, Sinner, Djokovic)...",
+    emptyText:
+      "Busca un tenista ATP o WTA arriba para ver su ranking, estadísticas y análisis del agente de IA. (Fuente de datos limitada a ~50 consultas por día en el plan gratuito.)",
+    chips: ["Carlos Alcaraz", "Jannik Sinner", "Novak Djokovic", "Alexander Zverev", "Alex De Minaur"],
+    statTiles: [
+      ["currentRank", "Ranking"],
+      ["bestRank", "Mejor ranking"],
+      ["total", "Récord total"],
+      ["grandSlam", "Grand Slam"],
+      ["master", "Masters"],
+      ["totalTitlesWon", "Títulos ganados"],
+      ["favouriteCourt", "Superficie favorita"],
+    ],
+    gamelogCols: [
+      ["date", "Fecha"],
+      ["opponent", "Rival"],
+      ["tournament", "Torneo"],
+      ["surface", "Superficie"],
+      ["result", "Resultado"],
+      ["score", "Marcador"],
+    ],
   },
 };
 
@@ -142,7 +163,7 @@ function updateLiveSub() {
   const hasPlayers = SPORTS[currentSport].hasPlayers !== false;
   const hasRoster = SPORTS[currentSport].hasRoster !== false;
   const hasMatchPreview = !!SPORTS[currentSport].hasMatchPreview;
-  if (!hasPlayers && hasMatchPreview) {
+  if (currentSport === "tennis") {
     liveSubEl.textContent = "Marcador de torneos en vivo · haz clic en un partido para ver el camino de cada jugador en el torneo";
   } else if (!hasPlayers) {
     liveSubEl.textContent = "Marcador de torneos en vivo, sin análisis de jugador para este deporte.";
@@ -252,14 +273,17 @@ async function loadPlayer(id) {
   document.getElementById("props-list").innerHTML = "Cargando líneas estimadas…";
 
   const supportsGamelog = SPORTS[currentSport].hasGamelog !== false;
+  const supportsPropLines = SPORTS[currentSport].hasPropLines !== false;
   document.getElementById("gamelog-section").classList.toggle("hidden", !supportsGamelog);
+  document.querySelector(".props-section").classList.toggle("hidden", !supportsPropLines);
+  const encodedId = encodeURIComponent(id);
 
   try {
     const [profile, gamelog, insight, props] = await Promise.all([
-      fetchJson(api(`/player/${id}`)),
-      supportsGamelog ? fetchJson(api(`/player/${id}/gamelog`)) : Promise.resolve({ games: [] }),
-      fetchJson(api(`/player/${id}/insight`)),
-      fetchJson(api(`/player/${id}/prop-lines`)),
+      fetchJson(api(`/player/${encodedId}`)),
+      supportsGamelog ? fetchJson(api(`/player/${encodedId}/gamelog`)) : Promise.resolve({ games: [] }),
+      fetchJson(api(`/player/${encodedId}/insight`)),
+      supportsPropLines ? fetchJson(api(`/player/${encodedId}/prop-lines`)) : Promise.resolve({ lines: [] }),
     ]);
     currentIsGoalie = !!profile.isGoalie;
     renderProfile(profile);
@@ -287,6 +311,8 @@ function renderProfile(p) {
     ? `${p.age} años`
     : p.sweaterNumber
     ? `#${p.sweaterNumber}`
+    : p.plays
+    ? p.plays
     : p.nationality
     ? p.nationality
     : "";
@@ -362,7 +388,7 @@ function renderGamelog(gamelog) {
   if (currentSport === "nhl") {
     cols = currentIsGoalie ? SPORTS.nhl.gamelogColsGoalie : SPORTS.nhl.gamelogColsSkater;
   } else {
-    cols = SPORTS.nba.gamelogCols;
+    cols = SPORTS[currentSport].gamelogCols;
   }
   head.innerHTML = `<tr>${cols.map(([, label]) => `<th>${label}</th>`).join("")}</tr>`;
   body.innerHTML = (gamelog.games || [])

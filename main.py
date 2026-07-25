@@ -9,9 +9,13 @@ ver FOOTBALL_DATA_API_KEY en .env). La capa de "agente" (nba_agent.py /
 nhl_agent.py / football_agent.py) es una heurística estadística con la
 misma forma de salida (headline + bullets + rating + probability) que
 tendría un agente basado en Vertex AI / Gemini, para poder conectarla más
-adelante sin tocar el resto de la app. Tenis (ATP/WTA, vía ESPN) solo
-tiene marcador de torneos en vivo, sin análisis de jugador: ESPN no expone
-estadísticas de temporada ni registro de partidos por jugador de tenis.
+adelante sin tocar el resto de la app. Tenis usa dos fuentes: ESPN para el marcador de torneos en vivo (sin key,
+tennis_client.py) y "Tennis API - ATP WTA ITF" en RapidAPI para ranking,
+estadísticas de carrera y registro de partidos por jugador (requiere una
+API key propia del usuario, ver TENNIS_STATS_API_KEY en .env,
+tennis_stats_client.py) — ESPN no expone nada de eso. Esa segunda API
+tiene un límite muy estricto de ~50 peticiones/día en el plan gratuito,
+por eso se cachea agresivamente (24h por jugador).
 Tenis de mesa queda pendiente: no existe hoy ninguna fuente gratuita.
 """
 from __future__ import annotations
@@ -36,6 +40,8 @@ import nhl_agent
 import nhl_client
 import tennis_agent
 import tennis_client
+import tennis_stats_agent
+import tennis_stats_client
 from agent_common import win_probability
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -353,7 +359,7 @@ async def football_match_preview(match_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Tenis (solo marcador en vivo — ESPN no expone estadisticas de jugador)
+# Tenis — marcador en vivo (ESPN) + estadísticas de jugador (RapidAPI)
 # ---------------------------------------------------------------------------
 
 
@@ -370,9 +376,65 @@ async def tennis_match_preview(match_id: str):
     return {**data, **tennis_agent.preview_match(data)}
 
 
+@app.get("/api/tennis/search")
+async def tennis_search(q: str = Query(..., min_length=2)):
+    try:
+        return {"results": await tennis_stats_client.search_players(q)}
+    except tennis_stats_client.QuotaExceeded:
+        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+
+
+@app.get("/api/tennis/player/{name}")
+async def tennis_player_profile(name: str):
+    try:
+        bundle = await tennis_stats_client.player_bundle(name)
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+    except tennis_stats_client.QuotaExceeded:
+        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+
+    profile = bundle.get("profile", {})
+    info = profile.get("information", {})
+    return {
+        "id": name,
+        "fullName": profile.get("name", name),
+        "position": (profile.get("type") or "").upper(),
+        "team": {"name": (profile.get("country") or {}).get("name")},
+        "age": None,
+        "nationality": (profile.get("country") or {}).get("name"),
+        "plays": info.get("plays"),
+        "coach": info.get("coach"),
+        "seasonStats": tennis_stats_agent.season_stats(bundle),
+    }
+
+
+@app.get("/api/tennis/player/{name}/insight")
+async def tennis_player_insight(name: str):
+    try:
+        bundle = await tennis_stats_client.player_bundle(name)
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+    except tennis_stats_client.QuotaExceeded:
+        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+    insight = tennis_stats_agent.analyze_player(name, bundle)
+    return {"playerId": name, "generatedAt": datetime.utcnow().isoformat() + "Z", **insight}
+
+
+@app.get("/api/tennis/player/{name}/gamelog")
+async def tennis_player_gamelog(name: str, limit: int = 15):
+    try:
+        bundle = await tennis_stats_client.player_bundle(name)
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+    except tennis_stats_client.QuotaExceeded:
+        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+    return {"games": tennis_stats_agent.build_gamelog(bundle, name, limit=limit)}
+
+
 @app.on_event("shutdown")
 async def shutdown():
     await nba_client.close_client()
     await nhl_client.close_client()
     await football_client.close_client()
     await tennis_client.close_client()
+    await tennis_stats_client.close_client()
