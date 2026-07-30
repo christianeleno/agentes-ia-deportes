@@ -409,9 +409,14 @@ document.getElementById("gamelog-toggle").addEventListener("click", () => {
 
 // --- Marcador en vivo -------------------------------------------------------
 
+const FOOTBALL_NO_TIME_STATES = ["FINISHED", "IN_PLAY", "PAUSED", "POSTPONED", "SUSPENDED", "CANCELLED"];
+
 function footballDetail(g) {
   const label = FOOTBALL_STATUS_ES[g.status] || g.status || "";
-  if (g.status === "FINISHED" || g.status === "IN_PLAY" || g.status === "PAUSED") {
+  if (FOOTBALL_NO_TIME_STATES.includes(g.status)) {
+    // Para partidos pospuestos/suspendidos/cancelados, football-data.org no
+    // da una fecha real (usa un placeholder a medianoche) — mostrar esa
+    // hora daría a entender que sí hay un horario confirmado.
     return `${g.competition || ""} · ${label}`;
   }
   const time = g.date
