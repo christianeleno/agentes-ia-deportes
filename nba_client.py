@@ -18,8 +18,10 @@ SITE_API = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
 CORE_API = "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    # OJO: ESPN bloquea con 403 los User-Agent que fingen ser un navegador
+    # (Chrome/Mozilla) pero deja pasar clientes que se identifican como lo
+    # que son (curl, httpx) — probado en vivo. No agregar un UA de navegador
+    # aquí, por contraintuitivo que parezca.
     "Accept": "application/json",
 }
 

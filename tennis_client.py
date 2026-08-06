@@ -19,8 +19,8 @@ TOURS = ["atp", "wta"]
 SINGLES_GROUPINGS = {"Men's Singles", "Women's Singles"}
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    # Ver nota en nba_client.py: ESPN bloquea (403) los User-Agent que
+    # fingen ser un navegador. No agregar uno.
     "Accept": "application/json",
 }
 
