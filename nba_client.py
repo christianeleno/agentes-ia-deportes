@@ -14,6 +14,8 @@ import time
 
 import httpx
 
+from resilience import stale_on_error
+
 SITE_API = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
 CORE_API = "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba"
 
@@ -158,6 +160,7 @@ async def athlete_gamelog(player_id: str, limit: int = 12) -> list[dict]:
 # --- Marcador en vivo y roster de partido ---------------------------------
 
 
+@stale_on_error
 async def scoreboard() -> list[dict]:
     data = await _get(f"{SITE_API}/scoreboard")
     events = data.get("events", [])

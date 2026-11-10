@@ -10,6 +10,8 @@ import time
 
 import httpx
 
+from resilience import stale_on_error
+
 WEB_API = "https://api-web.nhle.com/v1"
 
 HEADERS = {
@@ -133,6 +135,7 @@ async def player_gamelog(player_id: str, limit: int = 12) -> list[dict]:
 # --- Marcador en vivo y roster de partido -----------------------------------
 
 
+@stale_on_error
 async def scoreboard() -> list[dict]:
     data = await _get(f"{WEB_API}/score/now")
     games_raw = data.get("games", [])

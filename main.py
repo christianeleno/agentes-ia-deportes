@@ -28,7 +28,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -55,6 +55,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+
+@app.exception_handler(httpx.HTTPError)
+async def upstream_error_handler(request, exc):
+    # Fallo transitorio de una fuente externa (ESPN, NHL, football-data, RapidAPI):
+    # responder 503 con un mensaje claro en vez de un 500 sin explicación.
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "La fuente de datos no respondió. Intenta de nuevo en unos segundos."},
+    )
 
 
 @app.get("/")

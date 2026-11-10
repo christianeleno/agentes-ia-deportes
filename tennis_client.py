@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
+from resilience import stale_on_error
+
 SITE_API = "https://site.api.espn.com/apis/site/v2/sports/tennis"
 TOURS = ["atp", "wta"]
 SINGLES_GROUPINGS = {"Men's Singles", "Women's Singles"}
@@ -58,16 +60,19 @@ def _competitor_summary(c: dict) -> dict:
     }
 
 
+@stale_on_error
 async def scoreboard() -> list[dict]:
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(days=1)
     window_end = now + timedelta(days=2)
 
     matches: list[dict] = []
+    failed_tours = 0
     for tour in TOURS:
         try:
             data = await _tour_scoreboard(tour)
         except httpx.HTTPError:
+            failed_tours += 1
             continue
         for ev in data.get("events", []):
             tournament = ev.get("shortName") or ev.get("name")
@@ -106,6 +111,11 @@ async def scoreboard() -> list[dict]:
                             "away": _competitor_summary(away),
                         }
                     )
+
+    if failed_tours == len(TOURS):
+        # Falló ATP y WTA: no es "no hay partidos", es una caída de la fuente.
+        # Se lanza el error para que stale_on_error devuelva el último resultado bueno.
+        raise httpx.HTTPError("ESPN tenis no respondió (ATP y WTA)")
 
     matches.sort(key=lambda m: (m["state"] != "in", m["date"] or ""))
     return matches[:40]
