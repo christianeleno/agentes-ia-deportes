@@ -198,3 +198,28 @@ async def game_boxscore(game_id: str) -> dict:
         "away": build_side(stats.get("awayTeam", {}), data.get("awayTeam", {})),
         "home": build_side(stats.get("homeTeam", {}), data.get("homeTeam", {})),
     }
+
+
+# --- Jugadores destacados (botones de sugerencia) ----------------------------
+# Los 5 líderes de puntos de la temporada en curso.
+
+_featured_cache: tuple[float, list[str]] | None = None
+_FEATURED_TTL = 6 * 3600
+
+
+async def featured_players(limit: int = 5) -> list[str]:
+    global _featured_cache
+    now = time.time()
+    if _featured_cache and (now - _featured_cache[0]) < _FEATURED_TTL:
+        return _featured_cache[1]
+    data = await _get(f"{WEB_API}/skater-stats-leaders/current", categories="points", limit=limit)
+    names = []
+    for p in data.get("points", [])[:limit]:
+        first = (p.get("firstName") or {}).get("default", "")
+        last = (p.get("lastName") or {}).get("default", "")
+        full = f"{first} {last}".strip()
+        if full:
+            names.append(full)
+    if names:
+        _featured_cache = (now, names)
+    return names

@@ -65,17 +65,24 @@ async def _get(path: str, **params) -> dict:
 _player_index: list[dict] = []
 _player_index_at = 0.0
 _INDEX_TTL = 3 * 3600
+# Si alguna competencia falló al armar el índice (típicamente 429 por el límite
+# de 10 llamadas/minuto), el índice queda incompleto: se reintenta pronto en vez
+# de guardarlo 3 horas con jugadores faltantes.
+_INDEX_RETRY_TTL = 60
+_index_incomplete = False
 
 _standings_cache: dict[str, list[dict]] = {}
 _standings_at: dict[str, float] = {}
 _STANDINGS_TTL = 3600
 
 
-async def _competition_scorers(code: str) -> list[dict]:
+async def _competition_scorers(code: str) -> list[dict] | None:
+    """Goleadores de una competencia; None si la consulta falló (distinto de
+    'sin goleadores todavía', que es una lista vacía)."""
     try:
         data = await _get(f"/competitions/{code}/scorers", limit=100)
     except httpx.HTTPStatusError:
-        return []
+        return None
     return data.get("scorers", [])
 
 
@@ -96,9 +103,15 @@ def _position_label(player: dict) -> str:
 
 
 async def _build_player_index() -> list[dict]:
+    global _index_incomplete
     index: list[dict] = []
+    failed = False
     for code in COMPETITIONS:
-        for s in await _competition_scorers(code):
+        scorers = await _competition_scorers(code)
+        if scorers is None:
+            failed = True
+            continue
+        for s in scorers:
             player = s.get("player", {})
             team = s.get("team", {})
             index.append(
@@ -111,12 +124,14 @@ async def _build_player_index() -> list[dict]:
                     "stats": s,
                 }
             )
+    _index_incomplete = failed
     return index
 
 
 async def player_index() -> list[dict]:
     global _player_index, _player_index_at
-    if not _player_index or (time.time() - _player_index_at) > _INDEX_TTL:
+    ttl = _INDEX_RETRY_TTL if _index_incomplete else _INDEX_TTL
+    if not _player_index or (time.time() - _player_index_at) > ttl:
         _player_index = await _build_player_index()
         _player_index_at = time.time()
     return _player_index
@@ -263,3 +278,29 @@ async def scoreboard(date_from: str, date_to: str) -> list[dict]:
     _scoreboard_cache = games
     _scoreboard_at = time.time()
     return games
+
+
+# --- Jugadores destacados (botones de sugerencia) ----------------------------
+# El máximo goleador de cada competencia, en orden de prioridad (ligas grandes
+# primero). Se usa el índice ya cacheado: no cuesta llamadas extra a
+# football-data.org. Una liga sin goleadores todavía (receso) simplemente no
+# aporta y el cupo lo ocupa la siguiente. No se ordena por goles totales
+# porque el Brasileirão juega más partidos y dominaría la lista.
+
+_FEATURED_ORDER = ["PL", "PD", "SA", "BL1", "FL1", "CL", "BSA", "WC"]
+
+
+async def featured_players(limit: int = 5) -> list[str]:
+    index = await player_index()
+    names: list[str] = []
+    seen: set = set()
+    for code in _FEATURED_ORDER:
+        entries = [p for p in index if p["competition"] == code and p["fullName"] and p["id"] not in seen]
+        if not entries:
+            continue
+        best = max(entries, key=lambda p: to_int(p["stats"].get("goals")))
+        seen.add(best["id"])
+        names.append(best["fullName"])
+        if len(names) >= limit:
+            break
+    return names

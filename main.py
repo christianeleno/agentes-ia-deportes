@@ -460,6 +460,40 @@ async def tennis_player_gamelog(name: str, limit: int = 15):
     return {"games": tennis_stats_agent.build_gamelog(bundle, name, limit=limit)}
 
 
+# ---------------------------------------------------------------------------
+# Jugadores destacados (botones de sugerencia de la interfaz)
+# ---------------------------------------------------------------------------
+# Si la fuente falla, se responde una lista vacía (no un error): el frontend
+# tiene su propia lista fija de respaldo para ese caso.
+
+
+async def _featured(fetch):
+    try:
+        return {"players": await fetch()}
+    except (httpx.HTTPError, RuntimeError):
+        return {"players": []}
+
+
+@app.get("/api/nba/featured")
+async def nba_featured():
+    return await _featured(nba_client.featured_players)
+
+
+@app.get("/api/nhl/featured")
+async def nhl_featured():
+    return await _featured(nhl_client.featured_players)
+
+
+@app.get("/api/football/featured")
+async def football_featured():
+    return await _featured(football_client.featured_players)
+
+
+@app.get("/api/tennis/featured")
+async def tennis_featured():
+    return await _featured(tennis_stats_client.featured_players)
+
+
 @app.on_event("shutdown")
 async def shutdown():
     await nba_client.close_client()

@@ -135,3 +135,32 @@ async def player_bundle(name: str) -> dict:
     }
     _bundle_cache[name] = (now, bundle)
     return bundle
+
+
+# --- Jugadores destacados (botones de sugerencia) ----------------------------
+# Top 3 del ranking ATP + top 2 del ranking WTA. Cuesta 2 peticiones de la
+# cuota diaria (~50), por eso se cachea 24 h; si falla o no hay cuota, la
+# interfaz usa su lista fija de respaldo.
+
+_featured_cache: tuple[float, list[str]] | None = None
+_FEATURED_TTL = 24 * 3600
+
+
+async def featured_players() -> list[str]:
+    global _featured_cache
+    now = time.time()
+    if _featured_cache and (now - _featured_cache[0]) < _FEATURED_TTL:
+        return _featured_cache[1]
+    names: list[str] = []
+    for tour, count in (("atp", 3), ("wta", 2)):
+        try:
+            data = await _get(f"/{tour}/ranking/singles", pageSize=count)
+        except (httpx.HTTPError, QuotaExceeded):
+            continue
+        for row in (data.get("data") or [])[:count]:
+            name = (row.get("player") or {}).get("name")
+            if name:
+                names.append(name)
+    if names:
+        _featured_cache = (now, names)
+    return names

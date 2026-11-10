@@ -16,7 +16,9 @@ const SPORTS = {
   nba: {
     placeholder: "Buscar jugador de NBA (ej. Stephen Curry, LeBron James)...",
     emptyText: "Busca un jugador de NBA arriba para ver sus estadísticas y el análisis del agente de IA.",
-    chips: ["Stephen Curry", "LeBron James", "Nikola Jokic", "Giannis Antetokounmpo", "Luka Doncic"],
+    placeholderLabel: "Buscar jugador de NBA",
+    // Lista de respaldo: se reemplaza al cargar con los máximos anotadores actuales (/api/nba/featured).
+    chips: ["Luka Doncic", "Stephen Curry", "Shai Gilgeous-Alexander", "Victor Wembanyama", "Giannis Antetokounmpo"],
     statTiles: [
       ["avgPoints", "PPG"],
       ["avgRebounds", "RPG"],
@@ -41,7 +43,9 @@ const SPORTS = {
   nhl: {
     placeholder: "Buscar jugador de NHL (ej. Connor McDavid, Auston Matthews)...",
     emptyText: "Busca un jugador de NHL arriba para ver sus estadísticas y el análisis del agente de IA.",
-    chips: ["Connor McDavid", "Auston Matthews", "Nathan MacKinnon", "Sidney Crosby", "Connor Bedard"],
+    placeholderLabel: "Buscar jugador de NHL",
+    // Respaldo: se reemplaza con los líderes de puntos actuales (/api/nhl/featured).
+    chips: ["Connor McDavid", "Leon Draisaitl", "Kirill Kaprizov", "Nathan MacKinnon", "Auston Matthews"],
     statTilesSkater: [
       ["goals", "Goles"],
       ["assists", "Asistencias"],
@@ -81,7 +85,9 @@ const SPORTS = {
   football: {
     placeholder: "Buscar jugador de fútbol (ej. Mbappé, Messi, Haaland)...",
     emptyText:
-      "Busca un goleador de las principales ligas, Champions League, Mundial o Brasileirão. (Ligas europeas: en receso hasta agosto, sin datos de goleadores por ahora.)",
+      "Busca un goleador de las principales ligas, Champions League, Mundial o Brasileirão. Los botones muestran a los máximos goleadores del momento.",
+    placeholderLabel: "Buscar jugador de fútbol",
+    // Respaldo: se reemplaza con los máximos goleadores actuales (/api/football/featured).
     chips: ["Kylian Mbappé", "Lionel Messi", "Erling Haaland", "Vinicius Junior", "Jude Bellingham"],
     hasGamelog: false,
     hasRoster: false,
@@ -100,6 +106,8 @@ const SPORTS = {
     placeholder: "Buscar tenista (ej. Alcaraz, Sinner, Djokovic)...",
     emptyText:
       "Busca un tenista ATP o WTA arriba para ver su ranking, estadísticas y análisis del agente de IA. (Fuente de datos limitada a ~50 consultas por día en el plan gratuito.)",
+    placeholderLabel: "Buscar tenista",
+    // Respaldo: se reemplaza con el top del ranking ATP/WTA (/api/tennis/featured).
     chips: ["Carlos Alcaraz", "Jannik Sinner", "Novak Djokovic", "Alexander Zverev", "Alex De Minaur"],
     statTiles: [
       ["currentRank", "Ranking"],
@@ -185,9 +193,10 @@ function switchSport(sport) {
   const hasPlayers = SPORTS[sport].hasPlayers !== false;
   searchWrapEl.classList.toggle("hidden", !hasPlayers);
   searchInput.value = "";
-  searchInput.placeholder = SPORTS[sport].placeholder || "";
+  searchInput.placeholder = placeholderText(sport);
   emptyStateText.textContent = SPORTS[sport].emptyText;
   renderSuggestions();
+  loadFeatured(sport);
   updateLiveSub();
   playerView.classList.add("hidden");
   emptyState.classList.remove("hidden");
@@ -195,16 +204,49 @@ function switchSport(sport) {
   loadLiveScoreboard();
 }
 
+function placeholderText(sport) {
+  const cfg = SPORTS[sport];
+  if (cfg.placeholderLabel && cfg.chips && cfg.chips.length) {
+    return `${cfg.placeholderLabel} (ej. ${cfg.chips.slice(0, 2).join(", ")})...`;
+  }
+  return cfg.placeholder || "";
+}
+
 function renderSuggestions() {
-  suggestionsEl.innerHTML = (SPORTS[currentSport].chips || [])
-    .map((name) => `<button class="chip" data-name="${name}">${name}</button>`)
-    .join("");
-  suggestionsEl.querySelectorAll(".chip").forEach((chip) => {
+  suggestionsEl.replaceChildren();
+  (SPORTS[currentSport].chips || []).forEach((name) => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = name; // textContent: los nombres pueden llevar comillas o apóstrofes (ej. De'Aaron Fox)
     chip.addEventListener("click", () => {
-      searchInput.value = chip.dataset.name;
-      runSearch(chip.dataset.name, true);
+      searchInput.value = name;
+      runSearch(name, true);
     });
+    suggestionsEl.appendChild(chip);
   });
+}
+
+// Reemplaza la lista fija de botones por jugadores destacados reales del
+// momento (máximos anotadores/goleadores o top del ranking). Una vez por
+// deporte y por visita; si falla o llega vacío, se queda la lista de respaldo.
+const featuredLoaded = {};
+
+async function loadFeatured(sport) {
+  if (featuredLoaded[sport] || SPORTS[sport].hasPlayers === false) return;
+  featuredLoaded[sport] = true;
+  try {
+    const data = await fetchJson(`/api/${sport}/featured`);
+    if (!data.players || !data.players.length) return;
+    SPORTS[sport].chips = data.players;
+    if (currentSport === sport) {
+      renderSuggestions();
+      if (document.activeElement !== searchInput && !searchInput.value) {
+        searchInput.placeholder = placeholderText(sport);
+      }
+    }
+  } catch (err) {
+    console.error("No se pudieron cargar los jugadores destacados:", err);
+  }
 }
 
 // --- Búsqueda ------------------------------------------------------------
@@ -667,7 +709,8 @@ rosterModal.addEventListener("click", (e) => {
 // --- Arranque ----------------------------------------------------------------
 
 renderSuggestions();
-searchInput.placeholder = SPORTS[currentSport].placeholder;
+searchInput.placeholder = placeholderText(currentSport);
+loadFeatured(currentSport);
 updateLiveSub();
 loadLiveScoreboard();
 liveTimer = setInterval(loadLiveScoreboard, 30000);

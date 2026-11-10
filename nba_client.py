@@ -235,3 +235,27 @@ async def game_boxscore(game_id: str) -> dict:
             )
         result[side] = {"teamName": team.get("displayName"), "players": players}
     return result
+
+
+# --- Jugadores destacados (botones de sugerencia) ----------------------------
+# Los 5 máximos anotadores actuales, para que los botones de ejemplo de la
+# interfaz no queden desactualizados (retiros, traspasos, cambio de temporada).
+
+_featured_cache: tuple[float, list[str]] | None = None
+_FEATURED_TTL = 6 * 3600
+
+
+async def featured_players(limit: int = 5) -> list[str]:
+    global _featured_cache
+    now = time.time()
+    if _featured_cache and (now - _featured_cache[0]) < _FEATURED_TTL:
+        return _featured_cache[1]
+    data = await _get(f"{CORE_API}/statistics/byathlete", sort="offensive.avgPoints:desc", limit=limit)
+    names = [
+        a["athlete"]["displayName"]
+        for a in data.get("athletes", [])
+        if (a.get("athlete") or {}).get("displayName")
+    ]
+    if names:
+        _featured_cache = (now, names)
+    return names
