@@ -543,7 +543,11 @@ async function openRoster(gameId, titleText) {
   rosterBody.innerHTML = "Cargando alineaciones…";
   try {
     const data = await fetchJson(api(`/game/${gameId}/roster`));
+    const preGameNote = data.preGame
+      ? `<p class="roster-note">Este partido aún no empieza, así que la fuente no ha publicado la alineación. Se muestra el plantel de la temporada (con bajas y dudas); los puntos y titulares aparecen cuando arranque el juego.</p>`
+      : "";
     rosterBody.innerHTML = `
+      ${preGameNote}
       <div class="roster-teams">
         ${renderRosterTeam(data.away)}
         ${renderRosterTeam(data.home)}
@@ -690,12 +694,20 @@ function renderRosterTeam(team) {
         <div class="roster-player" data-id="${p.id}">
           <span class="rp-name">${p.fullName}</span>
           <span class="rp-pos">${p.position || ""}</span>
-          <span class="rp-pts">${p.points ?? ""}</span>
+          ${p.injury ? `<span class="rp-injury">${INJURY_ES[p.injury] || p.injury}</span>` : `<span class="rp-pts">${p.points ?? ""}</span>`}
         </div>`
         )
         .join("")}
     </div>`;
 }
+
+const INJURY_ES = {
+  Out: "Baja",
+  "Day-To-Day": "Día a día",
+  Questionable: "Duda",
+  Doubtful: "Duda",
+  Probable: "Probable",
+};
 
 function closeRoster() {
   rosterModal.classList.add("hidden");

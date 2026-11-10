@@ -205,7 +205,11 @@ async def game_boxscore(game_id: str) -> dict:
     box = data.get("boxscore", {})
     players_by_team = box.get("players", [])
 
-    result = {"away": {"teamName": None, "players": []}, "home": {"teamName": None, "players": []}}
+    result = {
+        "preGame": False,
+        "away": {"teamName": None, "players": []},
+        "home": {"teamName": None, "players": []},
+    }
     header_competitors = (data.get("header", {}).get("competitions") or [{}])[0].get("competitors", [])
     side_by_team_id = {c["team"]["id"]: c.get("homeAway") for c in header_competitors}
 
@@ -234,6 +238,39 @@ async def game_boxscore(game_id: str) -> dict:
                 }
             )
         result[side] = {"teamName": team.get("displayName"), "players": players}
+
+    # Antes del salto inicial ESPN todavía no publica la alineación (boxscore.players
+    # viene vacío). En ese caso se muestra el plantel de la temporada, con posición
+    # y estado de lesión, y se marca preGame para que la interfaz lo explique.
+    for c in header_competitors:
+        side = c.get("homeAway")
+        team = c.get("team", {})
+        if side not in ("away", "home"):
+            continue
+        if not result[side]["teamName"]:
+            result[side]["teamName"] = team.get("displayName")
+        if result[side]["players"]:
+            continue
+        try:
+            roster = await _team_roster(team.get("id"))
+        except httpx.HTTPError:
+            continue
+        players = []
+        for a in roster:
+            injuries = a.get("injuries") or []
+            players.append(
+                {
+                    "id": a.get("id"),
+                    "fullName": a.get("fullName") or a.get("displayName"),
+                    "position": (a.get("position") or {}).get("abbreviation", ""),
+                    "starter": None,
+                    "points": None,
+                    "injury": injuries[0].get("status") if injuries else None,
+                }
+            )
+        players.sort(key=lambda p: p["injury"] is not None)  # sanos primero, lesionados al final
+        result[side]["players"] = players
+        result["preGame"] = True
     return result
 
 

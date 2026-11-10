@@ -196,6 +196,8 @@ body {
 .roster-player .rp-name { flex: 1; font-size: 13px; }
 .roster-player .rp-pos { font-size: 11px; color: var(--muted); width: 28px; }
 .roster-player .rp-pts { font-size: 12px; font-weight: 700; width: 34px; text-align: right; color: var(--accent-2); }
+.roster-player .rp-injury { font-size: 11px; font-weight: 700; min-width: 34px; text-align: right; color: var(--hot); }
+.roster-note { margin: 0 0 14px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; }
 
 .preview-stat {
   display: flex;

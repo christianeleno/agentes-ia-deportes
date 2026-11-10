@@ -192,12 +192,51 @@ async def game_boxscore(game_id: str) -> dict:
                         "points": p.get("points") if group != "goalies" else p.get("saveShotsAgainst"),
                     }
                 )
-        return {"teamName": (team_meta.get("name") or {}).get("default"), "players": players}
+        return {"teamName": _team_display_name(team_meta), "players": players}
 
-    return {
+    result = {
+        "preGame": False,
         "away": build_side(stats.get("awayTeam", {}), data.get("awayTeam", {})),
         "home": build_side(stats.get("homeTeam", {}), data.get("homeTeam", {})),
     }
+
+    # Antes del primer pitazo la fuente no publica jugadores del partido
+    # (playerByGameStats viene vacío): se muestra el plantel actual del equipo.
+    for side, meta in (("away", data.get("awayTeam", {})), ("home", data.get("homeTeam", {}))):
+        if result[side]["players"] or not meta.get("abbrev"):
+            continue
+        try:
+            roster = await _team_roster(meta["abbrev"])
+        except httpx.HTTPError:
+            continue
+        players = []
+        for group, pos_fallback in (("forwards", None), ("defensemen", "D"), ("goalies", "G")):
+            for p in roster.get(group, []):
+                first = (p.get("firstName") or {}).get("default", "")
+                last = (p.get("lastName") or {}).get("default", "")
+                players.append(
+                    {
+                        "id": p.get("id"),
+                        "fullName": f"{first} {last}".strip(),
+                        "position": p.get("positionCode") or pos_fallback or "",
+                        "starter": None,
+                        "points": None,
+                    }
+                )
+        result[side]["players"] = players
+        result["preGame"] = True
+    return result
+
+
+def _team_display_name(team_meta: dict) -> str | None:
+    # En el boxscore de la NHL el nombre viene en commonName ("Flyers") y placeName
+    # ("Philadelphia"); el campo "name" que se usaba antes no existe, por eso los
+    # encabezados de equipo salían vacíos.
+    common = (team_meta.get("commonName") or {}).get("default")
+    place = (team_meta.get("placeName") or {}).get("default")
+    if common and place:
+        return f"{place} {common}"
+    return common or place or (team_meta.get("name") or {}).get("default")
 
 
 # --- Jugadores destacados (botones de sugerencia) ----------------------------
