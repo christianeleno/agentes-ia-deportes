@@ -384,7 +384,7 @@ async def _tennis_bundle_or_none(name: str | None) -> dict | None:
         return None
     try:
         return await tennis_stats_client.player_bundle(name)
-    except (httpx.HTTPStatusError, tennis_stats_client.QuotaExceeded):
+    except (httpx.HTTPError, tennis_stats_client.QuotaExceeded):
         return None
 
 
@@ -413,14 +413,22 @@ async def tennis_search(q: str = Query(..., min_length=2)):
         raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
 
 
-@app.get("/api/tennis/player/{name}")
-async def tennis_player_profile(name: str):
+async def _tennis_bundle(name: str) -> dict:
+    """Bundle de un tenista, traduciendo los fallos a respuestas claras: solo un
+    404 real de la fuente es "no encontrado"; cualquier otro fallo es temporal."""
     try:
-        bundle = await tennis_stats_client.player_bundle(name)
-    except httpx.HTTPStatusError:
-        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+        return await tennis_stats_client.player_bundle(name)
     except tennis_stats_client.QuotaExceeded:
         raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Jugador no encontrado")
+        raise HTTPException(status_code=503, detail="La fuente de estadísticas de tenis no respondió. Intenta de nuevo en unos segundos.")
+
+
+@app.get("/api/tennis/player/{name}")
+async def tennis_player_profile(name: str):
+    bundle = await _tennis_bundle(name)
 
     profile = bundle.get("profile", {})
     info = profile.get("information", {})
@@ -439,24 +447,14 @@ async def tennis_player_profile(name: str):
 
 @app.get("/api/tennis/player/{name}/insight")
 async def tennis_player_insight(name: str):
-    try:
-        bundle = await tennis_stats_client.player_bundle(name)
-    except httpx.HTTPStatusError:
-        raise HTTPException(status_code=404, detail="Jugador no encontrado")
-    except tennis_stats_client.QuotaExceeded:
-        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+    bundle = await _tennis_bundle(name)
     insight = tennis_stats_agent.analyze_player(name, bundle)
     return {"playerId": name, "generatedAt": datetime.utcnow().isoformat() + "Z", **insight}
 
 
 @app.get("/api/tennis/player/{name}/gamelog")
 async def tennis_player_gamelog(name: str, limit: int = 15):
-    try:
-        bundle = await tennis_stats_client.player_bundle(name)
-    except httpx.HTTPStatusError:
-        raise HTTPException(status_code=404, detail="Jugador no encontrado")
-    except tennis_stats_client.QuotaExceeded:
-        raise HTTPException(status_code=503, detail="Se agotó la cuota diaria gratuita de estadísticas de tenis. Vuelve mañana.")
+    bundle = await _tennis_bundle(name)
     return {"games": tennis_stats_agent.build_gamelog(bundle, name, limit=limit)}
 
 
